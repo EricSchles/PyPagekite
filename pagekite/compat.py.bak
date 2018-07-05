@@ -20,8 +20,8 @@ You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see: <http://www.gnu.org/licenses/>
 """
 ##############################################################################
-from . import common
-from .common import *
+import common
+from common import *
 
 
 # System logging on Unix
@@ -59,7 +59,8 @@ try:
   sorted([1, 2, 3])
 except:
   def sorted(l):
-    tmp = sorted(l[:])
+    tmp = l[:]
+    tmp.sort()
     return tmp
 
 try:
@@ -72,10 +73,10 @@ except:
     return s
 
 try:
-  from urllib.parse import parse_qs, urlparse
-except ImportError as e:
+  from urlparse import parse_qs, urlparse
+except ImportError, e:
   from cgi import parse_qs
-  from urllib.parse import urlparse
+  from urlparse import urlparse
 try:
   import hashlib
   def sha1hex(data):
@@ -93,9 +94,9 @@ try:
   from traceback import format_exc
 except ImportError:
   import traceback
-  import io
+  import StringIO
   def format_exc():
-    sio = io.StringIO()
+    sio = StringIO.StringIO()
     traceback.print_exc(file=sio)
     return sio.getvalue()
 

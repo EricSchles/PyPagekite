@@ -30,12 +30,12 @@ SOURCE='/sdcard/sl4a/scripts/droiddemo.py'
 import android
 import pagekite
 import os
-from urllib.parse import unquote
+from urllib import unquote
 try:
-  from urllib.parse import parse_qs, urlparse
-except Exception as e:
+  from urlparse import parse_qs, urlparse
+except Exception, e:
   from cgi import parse_qs
-  from urllib.parse import urlparse
+  from urlparse import urlparse
 
 
 
@@ -73,7 +73,7 @@ class UiRequestHandler(pagekite.UiRequestHandler):
       if iname.endswith('.jpg'):
         mtimes[iname] = os.path.getmtime(iname)
 
-    files = list(mtimes.keys())
+    files = mtimes.keys()
     files.sort(lambda x,y: cmp(mtimes[x], mtimes[y]))
     return files
 
@@ -100,8 +100,8 @@ class UiRequestHandler(pagekite.UiRequestHandler):
             pass
         return
  
-      except Exception as e:
-        print('%s' % e)
+      except Exception, e:
+        print '%s' % e
         pass 
 
     if path == '/latest-image.txt':
@@ -116,7 +116,7 @@ class UiRequestHandler(pagekite.UiRequestHandler):
         self.begin_headers(200, 'text/plain')
         self.end_headers()
         self.wfile.write(pyfile.read().replace(SECRET, 'mysecret'))
-      except IOError as e:
+      except IOError, e:
         self.begin_headers(404, 'text/plain')
         self.end_headers()
         self.wfile.write('Could not read %s: %s' % (SOURCE, e))

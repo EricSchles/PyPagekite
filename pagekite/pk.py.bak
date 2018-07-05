@@ -26,7 +26,7 @@ import cgi
 from cgi import escape as escape_html
 import errno
 import getopt
-import http.client
+import httplib
 import os
 import random
 import re
@@ -38,20 +38,20 @@ import tempfile
 import threading
 import time
 import traceback
-import urllib.request, urllib.parse, urllib.error
-import xmlrpc.client
+import urllib
+import xmlrpclib
 import zlib
 
-import socketserver
-from http.server import CGIHTTPRequestHandler
-from xmlrpc.server import SimpleXMLRPCServer, SimpleXMLRPCRequestHandler
-import http.cookies
+import SocketServer
+from CGIHTTPServer import CGIHTTPRequestHandler
+from SimpleXMLRPCServer import SimpleXMLRPCServer, SimpleXMLRPCRequestHandler
+import Cookie
 
-from .compat import *
-from .common import *
-from . import compat
-from . import common
-from . import logging
+from compat import *
+from common import *
+import compat
+import common
+import logging
 
 # This allows us to run, degraded, on Python < 2.6.
 try:
@@ -112,12 +112,12 @@ else:
 
 ##[ PageKite.py code starts here! ]############################################
 
-from .proto.proto import *
-from .proto.parsers import *
-from .proto.selectables import *
-from .proto.filters import *
-from .proto.conns import *
-from .ui.nullui import NullUi
+from proto.proto import *
+from proto.parsers import *
+from proto.selectables import *
+from proto.filters import *
+from proto.conns import *
+from ui.nullui import NullUi
 
 
 class AuthApp(object):
@@ -193,7 +193,7 @@ class AuthThread(threading.Thread):
     while self.keep_running:
       try:
         self._run()
-      except Exception as e:
+      except Exception, e:
         logging.LogError('AuthThread died: %s' % e)
         time.sleep(5)
     logging.LogDebug('AuthThread: done')
@@ -207,7 +207,7 @@ class AuthThread(threading.Thread):
         self.qc.wait()
       else:
         (requests, conn, callback) = self.jobs.pop(0)
-        if logging.DEBUG_IO: print('=== AUTH REQUESTS\n%s\n===' % requests)
+        if logging.DEBUG_IO: print '=== AUTH REQUESTS\n%s\n===' % requests
         self.qc.release()
 
         quotas = []
@@ -267,7 +267,7 @@ class AuthThread(threading.Thread):
 
         results.append(('%s-SessionID' % prefix,
                         '%x:%s' % (now, sha1hex(session))))
-        results.append(('%s-Misc' % prefix, urllib.parse.urlencode({
+        results.append(('%s-Misc' % prefix, urllib.urlencode({
                           'motd': (self.conns.config.motd_message or ''),
                         })))
         for upgrade in self.conns.config.upgrade_info:
@@ -297,7 +297,7 @@ class AuthThread(threading.Thread):
             else:
               conn.quota[2] = time.time()
 
-        if logging.DEBUG_IO: print('=== AUTH RESULTS\n%s\n===' % results)
+        if logging.DEBUG_IO: print '=== AUTH RESULTS\n%s\n===' % results
         callback(results, log_info)
         self.qc.acquire()
 
@@ -346,7 +346,7 @@ class Connections(object):
     tick = '%d' % (time.time()/12)
     if tick not in self.ip_tracker:
       deadline = int(tick)-10
-      for ot in list(self.ip_tracker.keys()):
+      for ot in self.ip_tracker.keys():
         if int(ot) < deadline:
           del self.ip_tracker[ot]
       self.ip_tracker[tick] = {}
@@ -376,7 +376,7 @@ class Connections(object):
           rmp.append(elc)
       for elc in rmp:
         self.idle.remove(elc)
-      for tid, tunnels in list(self.tunnels.items()):
+      for tid, tunnels in self.tunnels.items():
         if conn in tunnels:
           tunnels.remove(conn)
           if not tunnels:
@@ -433,7 +433,7 @@ class Connections(object):
         server = tunnel.server_info[tunnel.S_NAME]
         if server is not None:
           servers[server] = 1
-    return list(servers.keys())
+    return servers.keys()
 
   def CloseTunnel(self, proto, domain, conn):
     tid = '%s:%s' % (proto, domain)
@@ -525,7 +525,7 @@ class HttpUiThread(threading.Thread):
         self.httpd.handle_request()
       except KeyboardInterrupt:
         self.serve = False
-      except Exception as e:
+      except Exception, e:
         logging.LogInfo('HTTP UI caught exception: %s' % e)
     if self.httpd: self.httpd.socket.close()
     logging.LogDebug('HttpUiThread: done')
@@ -682,7 +682,7 @@ class TunnelManager(threading.Thread):
           elif random.randint(0, 10*pings) == 0:
             tunnel.SendPing()
 
-    for tunnel in list(dead.values()):
+    for tunnel in dead.values():
       logging.Log([('dead', tunnel.server_info[tunnel.S_NAME])])
       tunnel.Die(discard_buffer=True)
 
@@ -708,7 +708,7 @@ class TunnelManager(threading.Thread):
     while self.keep_running:
       try:
         self._run()
-      except Exception as e:
+      except Exception, e:
         logging.LogError('TunnelManager died: %s' % e)
         if logging.DEBUG_IO:
           traceback.print_exc(file=sys.stderr)
@@ -837,7 +837,7 @@ class TunnelManager(threading.Thread):
       self.ListBackEnds()
       self.UpdateUiStatus(problem, connecting)
 
-      for i in range(0, self.check_interval):
+      for i in xrange(0, self.check_interval):
         if self.keep_running:
           time.sleep(1)
           if i > self.check_interval:
@@ -852,7 +852,7 @@ class TunnelManager(threading.Thread):
 def SecureCreate(path):
   fd = open(path, 'w')
   try:
-    os.chmod(path, 0o600)
+    os.chmod(path, 0600)
   except OSError:
     pass
   return fd
@@ -1015,7 +1015,7 @@ class PageKite(object):
         self.rcfile = os.path.join(os.path.expanduser('~'), '.pagekite.rc')
         self.devnull = '/dev/null'
 
-    except Exception as e:
+    except Exception, e:
       # The above stuff may fail in some cases, e.g. on Android in SL4A.
       self.rcfile = 'pagekite.cfg'
       self.devnull = '/dev/null'
@@ -1051,7 +1051,7 @@ class PageKite(object):
         ((found == own_pemfile) and (newest < time.time() - 365*24*3600))):
       # No bundle found or bundle old, download a new one from the cURL site.
       try:
-        urllib.request.URLopener().retrieve(CURL_CA_CERTS, filename=own_pemfile)
+        urllib.URLopener().retrieve(CURL_CA_CERTS, filename=own_pemfile)
         return self.FindCACerts(use_curl_bundle=False)
       except:
         pass
@@ -1160,7 +1160,7 @@ class PageKite(object):
     ]
 
     if not self.kitename:
-      for be in list(self.backends.values()):
+      for be in self.backends.values():
         if not self.kitename or len(self.kitename) < len(be[BE_DOMAIN]):
           self.kitename = be[BE_DOMAIN]
           self.kitesecret = be[BE_SECRET]
@@ -1514,7 +1514,7 @@ class PageKite(object):
     self.ui.Tell(message)
 
   def PrintSettings(self, safe=False):
-    print('\n'.join(self.GenerateConfig(safe=safe)))
+    print '\n'.join(self.GenerateConfig(safe=safe))
 
   def SaveUserConfig(self, quiet=False):
     self.savefile = self.savefile or self.rcfile
@@ -1526,7 +1526,7 @@ class PageKite(object):
         self.ui.Tell(['Settings saved to: %s' % self.savefile])
         self.ui.Spacer()
       logging.Log([('saved', 'Settings saved to: %s' % self.savefile)])
-    except Exception as e:
+    except Exception, e:
       if logging.DEBUG_IO: traceback.print_exc(file=sys.stderr)
       self.ui.Tell(['Could not save to %s: %s' % (self.savefile, e)],
                    error=True)
@@ -1555,15 +1555,15 @@ class PageKite(object):
       os.dup2(sys.stderr.fileno(), sys.stdout.fileno())
     except:
       pass
-    print()
+    print
     if help or longhelp:
-      from . import manual
-      print(longhelp and manual.DOC() or manual.MINIDOC())
-      print('***')
+      import manual
+      print longhelp and manual.DOC() or manual.MINIDOC()
+      print '***'
     elif not noexit:
       self.ui.Status('exiting', message=(message or 'Good-bye!'))
     if message:
-      print('Error: %s' % message)
+      print 'Error: %s' % message
 
     if logging.DEBUG_IO:
       traceback.print_exc(file=sys.stderr)
@@ -1650,14 +1650,14 @@ class PageKite(object):
 
     lookup = '.'.join([srand, token, sign, protoport, domain, adom])
     if not lookup.endswith('.'): lookup += '.'
-    if logging.DEBUG_IO: print('=== AUTH LOOKUP\n%s\n===' % lookup)
+    if logging.DEBUG_IO: print '=== AUTH LOOKUP\n%s\n===' % lookup
 
     if auth_app:
       (hn, al, iplist) = auth_app.zk_auth(lookup)
     else:
       (hn, al, iplist) = socket.gethostbyname_ex(lookup)
 
-    if logging.DEBUG_IO: print('hn=%s\nal=%s\niplist=%s\n' % (hn, al, iplist))
+    if logging.DEBUG_IO: print 'hn=%s\nal=%s\niplist=%s\n' % (hn, al, iplist)
 
     # Extract auth error and extended quota info from CNAME replies
     if al:
@@ -1738,7 +1738,7 @@ class PageKite(object):
 
       if self.auth_domain or self.auth_domains:
         adom = ''
-        adom_keys = list(self.auth_domains.keys())
+        adom_keys = self.auth_domains.keys()
         adom_keys.sort(key=lambda k: (len(k), k))  # Longest match will win
         for dom in adom_keys:
           if domain.endswith('.' + dom):
@@ -1749,7 +1749,7 @@ class PageKite(object):
           try:
             return self.LookupDomainQuota(srand, token, sign, protoport,
                                           domain.replace('*', '_any_'), adom)
-          except Exception as e:
+          except Exception, e:
             # Lookup failed, fail open.
             if logging.DEBUG_IO: traceback.print_exc(file=sys.stderr)
             logging.LogError('Quota lookup failed: %s' % e)
@@ -1791,8 +1791,8 @@ class PageKite(object):
         self.ConfigureFromFile(os.path.join(dirname, fn))
 
   def HelpAndExit(self, longhelp=False):
-    from . import manual
-    print(longhelp and manual.DOC() or manual.MINIDOC())
+    import manual
+    print longhelp and manual.DOC() or manual.MINIDOC()
     sys.exit(0)
 
   def AddNewKite(self, kitespec, status=BE_STATUS_UNKNOWN, secret=None):
@@ -1801,7 +1801,7 @@ class PageKite(object):
     req = {}
     for server in self.conns.TunnelServers():
       req[server] = '\r\n'.join(PageKiteRequestHeaders(server, new_specs, {}))
-    for tid, tunnels in self.conns.tunnels.items():
+    for tid, tunnels in self.conns.tunnels.iteritems():
       for tunnel in tunnels:
         server_name = tunnel.server_info[tunnel.S_NAME]
         if server_name in req:
@@ -2244,7 +2244,7 @@ class PageKite(object):
         sys.exit(0)
 
       elif opt == '--controlpass':
-        print(self.ConfigSecret())
+        print self.ConfigSecret()
         sys.exit(0)
 
       else:
@@ -2355,7 +2355,7 @@ class PageKite(object):
       specs = self.ArgToBackendSpecs(spec)
       just_these_backends.update(specs)
 
-      spec = specs[list(specs.keys())[0]]
+      spec = specs[specs.keys()[0]]
       http_host = '%s/%s' % (spec[BE_DOMAIN], spec[BE_PORT] or '80')
       if be_config:
         # Map the +foo=bar values to per-site config settings.
@@ -2376,10 +2376,10 @@ class PageKite(object):
       if be_paths:
         host_paths = just_these_webpaths.get(http_host, {})
         host_config = just_these_be_configs.get(http_host, {})
-        rand_seed = '%s:%x' % (specs[list(specs.keys())[0]][BE_SECRET],
+        rand_seed = '%s:%x' % (specs[specs.keys()[0]][BE_SECRET],
                                time.time()/3600)
 
-        first = (len(list(host_paths.keys())) == 0) or be_path_prefix
+        first = (len(host_paths.keys()) == 0) or be_path_prefix
         paranoid = host_config.get('hide', False)
         set_root = host_config.get('root', True)
         if len(be_paths) == 1:
@@ -2412,7 +2412,7 @@ class PageKite(object):
         just_these_webpaths[http_host] = host_paths
 
     need_registration = {}
-    for be in list(just_these_backends.values()):
+    for be in just_these_backends.values():
       if not be[BE_SECRET]:
         if self.kitesecret and be[BE_DOMAIN] == self.kitename:
           be[BE_SECRET] = self.kitesecret
@@ -2430,19 +2430,19 @@ class PageKite(object):
 
       # Update the secrets...
       rdom, rsecret = result
-      for be in list(just_these_backends.values()):
+      for be in just_these_backends.values():
         if be[BE_DOMAIN] == domain: be[BE_SECRET] = rsecret
 
       # Update the kite names themselves, if they changed.
       if rdom != domain:
-        for bid in list(just_these_backends.keys()):
+        for bid in just_these_backends.keys():
           nbid = bid.replace(':'+domain, ':'+rdom)
           if nbid != bid:
             just_these_backends[nbid] = just_these_backends[bid]
             just_these_backends[nbid][BE_DOMAIN] = rdom
             del just_these_backends[bid]
 
-    if list(just_these_backends.keys()):
+    if just_these_backends.keys():
       if self.kite_add:
         self.backends.update(just_these_backends)
       elif self.kite_remove:
@@ -2463,12 +2463,12 @@ class PageKite(object):
         except KeyError:
           raise ConfigError('No such kite: %s' % bid)
       elif self.kite_only:
-        for be in list(self.backends.values()): be[BE_STATUS] = BE_STATUS_DISABLED
+        for be in self.backends.values(): be[BE_STATUS] = BE_STATUS_DISABLED
         self.backends.update(just_these_backends)
       else:
         # Nothing explictly requested: 'only' behavior with a twist;
         # If kites are new, don't make disables persist on save.
-        for be in list(self.backends.values()):
+        for be in self.backends.values():
           be[BE_STATUS] = (need_registration and BE_STATUS_DISABLE_ONCE
                                               or BE_STATUS_DISABLED)
         self.backends.update(just_these_backends)
@@ -2480,14 +2480,14 @@ class PageKite(object):
 
   def GetServiceXmlRpc(self):
     service = self.service_xmlrpc
-    return xmlrpc.client.ServerProxy(self.service_xmlrpc, None, None, False)
+    return xmlrpclib.ServerProxy(self.service_xmlrpc, None, None, False)
 
   def _KiteInfo(self, kitename):
     is_service_domain = kitename and SERVICE_DOMAIN_RE.search(kitename)
     is_subdomain_of = is_cname_for = is_cname_ready = False
     secret = None
 
-    for be in list(self.backends.values()):
+    for be in self.backends.values():
       if be[BE_SECRET] and (be[BE_DOMAIN] == kitename):
         secret = be[BE_SECRET]
 
@@ -2542,13 +2542,13 @@ class PageKite(object):
     if self.kitename and self.kitesecret:
       service_accounts[self.kitename] = self.kitesecret
 
-    for be in list(self.backends.values()):
+    for be in self.backends.values():
       if SERVICE_DOMAIN_RE.search(be[BE_DOMAIN]):
         if be[BE_DOMAIN] == is_cname_for:
           is_cname_ready = True
-        if be[BE_SECRET] not in list(service_accounts.values()):
+        if be[BE_SECRET] not in service_accounts.values():
           service_accounts[be[BE_DOMAIN]] = be[BE_SECRET]
-    service_account_list = list(service_accounts.keys())
+    service_account_list = service_accounts.keys()
 
     if registered:
       state = ['choose_backends']
@@ -2786,7 +2786,7 @@ class PageKite(object):
             Goto('service_signup', back_skips_current=True)
           else:
             self.ui.ExplainError(error, 'Unknown problem!')
-            print('FIXME!  Error is %s' % error)
+            print 'FIXME!  Error is %s' % error
             Goto('abort')
 
         elif 'choose_kite_account' in state:
@@ -2838,7 +2838,7 @@ class PageKite(object):
               for be_spec in be_specs:
                 cfgs.update(self.ArgToBackendSpecs(be_spec % kitename,
                                                    secret=secret))
-          except Exception as e:
+          except Exception, e:
             error = '%s' % e
 
           if error:
@@ -2941,7 +2941,7 @@ class PageKite(object):
         if not data.startswith('HTTP/1.1 503 Unavailable'):
           raise Exception()
 
-      except Exception as e:
+      except Exception, e:
         logging.LogDebug('Ping %s:%s failed: %s' % (host, port, e))
         return (100000, uuid)
 
@@ -2999,10 +2999,10 @@ class PageKite(object):
       logging.LogDebug('DNS lookup failed for %s' % host)
 
     ips = {}
-    for ipaddrs in list(self.dns_cache[host].values()):
+    for ipaddrs in self.dns_cache[host].values():
       for ip in ipaddrs:
         ips[ip] = 1
-    return list(ips.keys())
+    return ips.keys()
 
   def GetActiveBackends(self, include_loopback=False):
     active = []
@@ -3038,7 +3038,7 @@ class PageKite(object):
     # Enable internal loopback
     if self.isfrontend:
       need_loopback = False
-      for be in list(self.backends.values()):
+      for be in self.backends.values():
         if be[BE_BHOST]:
           need_loopback = True
       if need_loopback:
@@ -3097,11 +3097,11 @@ class PageKite(object):
           threads[-1].start()
         for t in threads:
           t.join(max(0.1, deadline - time.time()))
-      except Exception as e:
+      except Exception, e:
         logging.LogDebug('Unreachable: %s, %s' % (domain, e))
 
       # Evaluate ping results, mark fastest N servers as preferred
-      pings = [list(ping) + [ip] for ip, ping in pinged.items()]
+      pings = [list(ping) + [ip] for ip, ping in pinged.iteritems()]
       while count > 0 and pings:
         mIdx = pings.index(min(pings))
         if pings[mIdx][0] > 60:
@@ -3118,8 +3118,8 @@ class PageKite(object):
           del pings[mIdx]
 
     nvr = self.servers_never
-    self.servers = [v for v in list(servers_all.values()) if v not in nvr]
-    self.servers_preferred = [v for v in list(servers_pref.values()) if v not in nvr]
+    self.servers = [v for v in servers_all.values() if v not in nvr]
+    self.servers_preferred = [v for v in servers_pref.values() if v not in nvr]
     logging.LogDebug('Preferred: %s' % ', '.join(self.servers_preferred))
 
   def ConnectFrontend(self, conns, server):
@@ -3174,7 +3174,7 @@ class PageKite(object):
             tunnel.countas.startswith('frontend')):
           kill.append(tunnel)
     for tunnel in kill:
-      if len(list(tunnel.users.keys())) < 1:
+      if len(tunnel.users.keys()) < 1:
         tunnel.Die()
     return kill and True or False
 
@@ -3238,7 +3238,7 @@ class PageKite(object):
       ddns_fmt, ddns_args = self.dyndns
 
       domains = {}
-      for bid in list(self.backends.keys()):
+      for bid in self.backends.keys():
         proto, domain = bid.split(':')
         if domain not in domains:
           domains[domain] = (self.backends[bid][BE_SECRET], [])
@@ -3259,7 +3259,7 @@ class PageKite(object):
               domains[domain][1].append(ip)
 
       updates = {}
-      for domain, (secret, ips) in domains.items():
+      for domain, (secret, ips) in domains.iteritems():
         if ips:
           # NOTE: Here it would be tempting to skip updates if we already
           #       see correct results in DNS. We avoid this temptation,
@@ -3298,7 +3298,7 @@ class PageKite(object):
             self.ui.Status('dyndns', color=self.ui.YELLOW,
                                      message='Updating DNS for %s...' % domain)
             # FIXME: If the network misbehaves, can this stall forever?
-            result = ''.join(urllib.request.urlopen(updates[update]).readlines())
+            result = ''.join(urllib.urlopen(updates[update]).readlines())
             if result.startswith('good') or result.startswith('nochg'):
               logging.Log([('dyndns', result), ('data', update)])
               self.SetBackendStatus(domain, sub=BE_STATUS_ERR_DNS)
@@ -3311,7 +3311,7 @@ class PageKite(object):
               failed_updates.append(domain)
               logging.LogInfo('DynDNS update failed: %s' % result,
                               [('data', update)])
-          except Exception as e:
+          except Exception, e:
             failed_updates.append(update.split(':')[0])
             logging.LogInfo('DynDNS update failed: %s' % e, [('data', update)])
             if logging.DEBUG_IO:
@@ -3370,7 +3370,7 @@ class PageKite(object):
         if not self.ui.WANTS_STDERR:
           os.dup2(fd.fileno(), sys.stdin.fileno())
           os.dup2(fd.fileno(), sys.stderr.fileno())
-      except Exception as e:
+      except Exception, e:
         raise ConfigError('%s' % e)
 
   def Daemonize(self):
@@ -3383,8 +3383,8 @@ class PageKite(object):
 
   def ProcessWritable(self, oready):
     if logging.DEBUG_IO:
-      print('\n=== Ready for Write: %s' % [o and o.fileno() or ''
-                                           for o in oready])
+      print '\n=== Ready for Write: %s' % [o and o.fileno() or ''
+                                           for o in oready]
     for osock in oready:
       if osock:
         conn = self.conns.Connection(osock)
@@ -3393,8 +3393,8 @@ class PageKite(object):
 
   def ProcessReadable(self, iready, throttle):
     if logging.DEBUG_IO:
-      print('\n=== Ready for Read: %s' % [i and i.fileno() or None
-                                          for i in iready])
+      print '\n=== Ready for Read: %s' % [i and i.fileno() or None
+                                          for i in iready]
     for isock in iready:
       if isock is not None:
         conn = self.conns.Connection(isock)
@@ -3611,7 +3611,7 @@ class PageKite(object):
       # Create the Tunnel Manager
       self.tunnel_manager = TunnelManager(self, conns)
 
-    except Exception as e:
+    except Exception, e:
       self.LogTo('stdio')
       logging.FlushLogMemory()
       if logging.DEBUG_IO:
@@ -3708,9 +3708,9 @@ def Main(pagekite, configure, uiclass=NullUi,
       try:
         try:
           configure(pk)
-        except SystemExit as status:
+        except SystemExit, status:
           sys.exit(status)
-        except Exception as e:
+        except Exception, e:
           if logging.DEBUG_IO:
               raise
           raise ConfigError(e)
@@ -3719,37 +3719,37 @@ def Main(pagekite, configure, uiclass=NullUi,
         if shell_mode is not True:
           pk.Start()
 
-      except (ConfigError, getopt.GetoptError) as msg:
+      except (ConfigError, getopt.GetoptError), msg:
         pk.FallDown(msg, help=(not shell_mode), noexit=shell_mode)
         if shell_mode:
           shell_mode = 'more'
 
-      except KeyboardInterrupt as msg:
+      except KeyboardInterrupt, msg:
         pk.FallDown(None, help=False, noexit=True)
         if shell_mode:
           shell_mode = 'auto'
         else:
           return
 
-    except SystemExit as status:
+    except SystemExit, status:
       if shell_mode:
         shell_mode = 'more'
       else:
         sys.exit(status)
 
-    except Exception as msg:
+    except Exception, msg:
       traceback.print_exc(file=sys.stderr)
       if pk.crash_report_url:
         try:
-          print('Submitting crash report to %s' % pk.crash_report_url)
-          logging.LogDebug(''.join(urllib.request.urlopen(pk.crash_report_url,
-                                          urllib.parse.urlencode({
+          print 'Submitting crash report to %s' % pk.crash_report_url
+          logging.LogDebug(''.join(urllib.urlopen(pk.crash_report_url,
+                                          urllib.urlencode({
                                             'platform': sys.platform,
                                             'appver': APPVER,
                                             'crash': format_exc()
                                           })).readlines()))
-        except Exception as e:
-          print('FAILED: %s' % e)
+        except Exception, e:
+          print 'FAILED: %s' % e
 
       pk.FallDown(msg, help=False, noexit=pk.main_loop)
       crashes = min(9, crashes+1)
@@ -3761,7 +3761,7 @@ def Main(pagekite, configure, uiclass=NullUi,
         shell_mode = 'more'
       except (KeyboardInterrupt, IOError, OSError):
         ui.Status('quitting')
-        print()
+        print
         return
     elif not pk.main_loop:
       return
@@ -3772,7 +3772,7 @@ def Main(pagekite, configure, uiclass=NullUi,
 
 
 def Shell(pk, ui, shell_mode):
-  from . import manual
+  import manual
   try:
     ui.Reset()
     if shell_mode != 'more':
@@ -3803,12 +3803,12 @@ def Shell(pk, ui, shell_mode):
         return rv
   finally:
     ui.EndWizard(quietly=True)
-    print()
+    print
 
 
 def Configure(pk):
   if '--appver' in sys.argv:
-    print('%s' % APPVER)
+    print '%s' % APPVER
     sys.exit(0)
 
   if '--clean' not in sys.argv and '--help' not in sys.argv:
@@ -3826,7 +3826,7 @@ def Configure(pk):
     pk.PrintSettings(safe=True)
     sys.exit(0)
 
-  if not list(pk.backends.keys()) and (not pk.kitesecret or not pk.kitename):
+  if not pk.backends.keys() and (not pk.kitesecret or not pk.kitename):
     if '--signup' in sys.argv or friendly_mode:
       pk.RegisterNewKite(autoconfigure=True, first=True)
     if friendly_mode:
@@ -3837,7 +3837,7 @@ def Configure(pk):
   if pk.added_kites:
     if (pk.save or
         pk.ui.AskYesNo('Save settings to %s?' % pk.rcfile,
-                       default=(len(list(pk.backends.keys())) > 0))):
+                       default=(len(pk.backends.keys()) > 0))):
       pk.SaveUserConfig()
     pk.servers_new_only = 'Once'
   elif pk.save:

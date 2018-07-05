@@ -31,12 +31,12 @@ import tempfile
 import threading
 import time
 import traceback
-import urllib.request, urllib.parse, urllib.error
+import urllib
 
-import socketserver
-from http.server import CGIHTTPRequestHandler
-from xmlrpc.server import SimpleXMLRPCServer, SimpleXMLRPCRequestHandler
-import http.cookies
+import SocketServer
+from CGIHTTPServer import CGIHTTPRequestHandler
+from SimpleXMLRPCServer import SimpleXMLRPCServer, SimpleXMLRPCRequestHandler
+import Cookie
 
 from pagekite.common import *
 from pagekite.compat import *
@@ -58,17 +58,18 @@ try:
   sorted([1, 2, 3])
 except:
   def sorted(l):
-    tmp = sorted(l[:])
+    tmp = l[:]
+    tmp.sort()
     return tmp
 
 
 # Different Python 2.x versions complain about deprecation depending on
 # where we pull these from.
 try:
-  from urllib.parse import parse_qs, urlparse
-except ImportError as e:
+  from urlparse import parse_qs, urlparse
+except ImportError, e:
   from cgi import parse_qs
-  from urllib.parse import urlparse
+  from urlparse import urlparse
 try:
   import hashlib
   def sha1hex(data):
@@ -236,12 +237,12 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
 
   def sendChunk(self, chunk):
     if self.chunked:
-      if logging.DEBUG_IO: print('<== SENDING CHUNK ===\n%s\n' % chunk)
+      if logging.DEBUG_IO: print '<== SENDING CHUNK ===\n%s\n' % chunk
       self.wfile.write('%x\r\n' % len(chunk))
       self.wfile.write(chunk)
       self.wfile.write('\r\n')
     else:
-      if logging.DEBUG_IO: print('<== SENDING ===\n%s\n' % chunk)
+      if logging.DEBUG_IO: print '<== SENDING ===\n%s\n' % chunk
       self.wfile.write(chunk)
 
   def sendEof(self):
@@ -274,7 +275,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
 
   def needPassword(self):
     if self.server.pkite.ui_password: return True
-    userkeys = [k for k in list(self.host_config.keys()) if k.startswith('password/')]
+    userkeys = [k for k in self.host_config.keys() if k.startswith('password/')]
     return userkeys
 
   def checkUsernamePasswordAuth(self, username, password):
@@ -311,7 +312,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       self.checkRequestAuth(scheme, netloc, path, qs)
       return True
 
-    except (ValueError, KeyError, AuthError) as e:
+    except (ValueError, KeyError, AuthError), e:
       logging.LogDebug('HTTP Auth failed: %s' % e)
     else:
       logging.LogDebug('HTTP Auth failed: Unauthorized')
@@ -348,7 +349,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
           http_host = '%s:%s' % (be[BE_DOMAIN],
                                  be[BE_PORT] or 80)
     if not http_host:
-      if list(self.server.pkite.be_config.keys()):
+      if self.server.pkite.be_config.keys():
         http_host = sorted(self.server.pkite.be_config.keys()
                            )[0].replace('/', ':')
       else:
@@ -371,9 +372,9 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
                                     qs, None)
     except socket.error:
       pass
-    except Exception as e:
+    except Exception, e:
       logging.Log([('err', 'GET error at %s: %s' % (path, e))])
-      if logging.DEBUG_IO: print('=== ERROR\n%s\n===' % format_exc())
+      if logging.DEBUG_IO: print '=== ERROR\n%s\n===' % format_exc()
       self.sendResponse('<h1>Internal Error</h1>\n', code=500, msg='Error')
 
   def do_HEAD(self):
@@ -424,7 +425,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       self.post_data.seek(0)
     except socket.error:
       pass
-    except Exception as e:
+    except Exception, e:
       logging.Log([('err', 'POST error at %s: %s' % (path, e))])
       self.sendResponse('<h1>Internal Error</h1>\n', code=500, msg='Error')
       self.rfile = self.old_rfile
@@ -437,7 +438,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
                                     qs, posted)
     except socket.error:
       pass
-    except Exception as e:
+    except Exception, e:
       logging.Log([('err', 'Error handling POST at %s: %s' % (path, e))])
       self.sendResponse('<h1>Internal Error</h1>\n', code=500, msg='Error')
 
@@ -497,9 +498,9 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
         if os.path.isdir(fpath):
           fclass = ['dir']
           if not fn.endswith('/'): fn += '/'
-          qfn = urllib.parse.quote(fn)
+          qfn = urllib.quote(fn)
         else:
-          qfn = urllib.parse.quote(fn)
+          qfn = urllib.quote(fn)
           fn = os.path.basename(fn)
           fclass = ['file']
           ops.append('download')
@@ -534,7 +535,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     return ''.join(fhtml)
 
   def convertPaths(self, path):
-    path = urllib.parse.unquote(path)
+    path = urllib.unquote(path)
     if path.find('..') >= 0: raise IOError("Evil")
 
     paths = self.server.pkite.ui_paths
@@ -744,7 +745,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
             rf_size = rf_stat.st_size
           except:
             self.chunked = True
-    except (IOError, OSError) as e:
+    except (IOError, OSError), e:
       return False
 
     headers = [ ]
@@ -834,7 +835,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
       'now': time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()),
       'ver': APPVER
     }
-    for key in list(self.headers.keys()):
+    for key in self.headers.keys():
       data['http_'+key.lower()] = self.headers.get(key)
 
     if 'download' in qs:
@@ -846,7 +847,7 @@ class UiRequestHandler(SimpleXMLRPCRequestHandler):
     data['method'] = data.get('http_x-pagekite-proto', 'http').lower()
 
     if 'http_cookie' in data:
-      cookies = http.cookies.SimpleCookie(data['http_cookie'])
+      cookies = Cookie.SimpleCookie(data['http_cookie'])
     else:
       cookies = {}
 
@@ -1099,7 +1100,7 @@ class RemoteControlInterface(object):
     return [ll for ll in data if int(ll['ll'], 16) > last_seen]
 
 
-class UiHttpServer(socketserver.ThreadingMixIn, SimpleXMLRPCServer):
+class UiHttpServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
   def __init__(self, sspec, pkite, conns,
                handler=UiRequestHandler,
                ssl_pem_filename=None):

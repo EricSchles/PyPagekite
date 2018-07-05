@@ -97,7 +97,7 @@ def checkSignature(sign='', secret='', payload=''):
 def PageKiteRequestHeaders(server, backends, tokens=None, testtoken=None):
   req = []
   tokens = tokens or {}
-  for d in list(backends.keys()):
+  for d in backends.keys():
     if (backends[d][BE_BHOST] and
         backends[d][BE_SECRET] and
         backends[d][BE_STATUS] not in BE_INACTIVE):

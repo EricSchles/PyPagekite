@@ -327,14 +327,13 @@ class Selectable(object):
     while len(discard) < eat_bytes:
       try:
         discard += self.fd.recv(eat_bytes - len(discard))
-      except socket.error as xxx_todo_changeme:
-        (errno, msg) = xxx_todo_changeme.args
+      except socket.error, (errno, msg):
         self.LogInfo('Error reading (%d/%d) socket: %s (errno=%s)' % (
                        eat_bytes, self.peeked, msg, errno))
         time.sleep(0.1)
 
     if logging.DEBUG_IO:
-      print('===[ ATE %d PEEKED BYTES ]===\n' % eat_bytes)
+      print '===[ ATE %d PEEKED BYTES ]===\n' % eat_bytes
     self.peeked -= eat_bytes
     self.peeking = keep_peeking
     return
@@ -363,27 +362,26 @@ class Selectable(object):
         data = self.fd.recv(maxread, socket.MSG_PEEK)
         self.peeked = len(data)
         if logging.DEBUG_IO:
-          print('<== PEEK =[%s]==(\n%s)==' % (self, data[:160]))
+          print '<== PEEK =[%s]==(\n%s)==' % (self, data[:160])
       else:
         data = self.fd.recv(maxread)
         if logging.DEBUG_IO:
-          print(('<== IN =[%s @ %dbps]==(\n%s)=='
-                 ) % (self, self.max_read_speed, data[:160]))
-    except (SSL.WantReadError, SSL.WantWriteError) as err:
+          print ('<== IN =[%s @ %dbps]==(\n%s)=='
+                 ) % (self, self.max_read_speed, data[:160])
+    except (SSL.WantReadError, SSL.WantWriteError), err:
       return True
-    except IOError as err:
+    except IOError, err:
       if err.errno not in self.HARMLESS_ERRNOS:
         self.LogDebug('Error reading socket: %s (%s)' % (err, err.errno))
         common.DISCONNECT_COUNT += 1
         return False
       else:
         return True
-    except (SSL.Error, SSL.ZeroReturnError, SSL.SysCallError) as err:
+    except (SSL.Error, SSL.ZeroReturnError, SSL.SysCallError), err:
       self.LogDebug('Error reading socket (SSL): %s' % err)
       common.DISCONNECT_COUNT += 1
       return False
-    except socket.error as xxx_todo_changeme2:
-      (errno, msg) = xxx_todo_changeme2.args
+    except socket.error, (errno, msg):
       if errno in self.HARMLESS_ERRNOS:
         return True
       else:
@@ -395,7 +393,7 @@ class Selectable(object):
     if data is None or data == '':
       self.read_eof = True
       if logging.DEBUG_IO:
-        print('<== IN =[%s]==(EOF)==' % self)
+        print '<== IN =[%s]==(EOF)==' % self
       return self.ProcessData('')
     else:
       if not self.peeking:
@@ -470,14 +468,14 @@ class Selectable(object):
           try:
             sent_bytes = self.fd.send(sending[:want_send])
             if logging.DEBUG_IO:
-              print(('==> OUT =[%s: %d/%d bytes]==(\n%s)=='
-                     ) % (self, sent_bytes, want_send, sending[:min(160, sent_bytes)]))
+              print ('==> OUT =[%s: %d/%d bytes]==(\n%s)=='
+                     ) % (self, sent_bytes, want_send, sending[:min(160, sent_bytes)])
             self.wrote_bytes += sent_bytes
             self.write_retry = None
             break
-          except (SSL.WantWriteError, SSL.WantReadError) as err:
+          except (SSL.WantWriteError, SSL.WantReadError), err:
             if logging.DEBUG_IO:
-              print('=== WRITE SSL RETRY: =[%s: %s bytes]==' % (self, want_send))
+              print '=== WRITE SSL RETRY: =[%s: %s bytes]==' % (self, want_send)
             if try_wait:
               time.sleep(try_wait)
         if sent_bytes is None:
@@ -485,7 +483,7 @@ class Selectable(object):
           self.ProcessEofWrite()
           common.DISCONNECT_COUNT += 1
           return False
-      except IOError as err:
+      except IOError, err:
         if err.errno not in self.HARMLESS_ERRNOS:
           self.LogInfo('Error sending: %s' % err)
           self.ProcessEofWrite()
@@ -493,10 +491,9 @@ class Selectable(object):
           return False
         else:
           if logging.DEBUG_IO:
-            print('=== WRITE HICCUP: =[%s: %s bytes]==' % (self, want_send))
+            print '=== WRITE HICCUP: =[%s: %s bytes]==' % (self, want_send)
           self.write_retry = want_send
-      except socket.error as xxx_todo_changeme1:
-        (errno, msg) = xxx_todo_changeme1.args
+      except socket.error, (errno, msg):
         if errno not in self.HARMLESS_ERRNOS:
           self.LogInfo('Error sending: %s (errno=%s)' % (msg, errno))
           self.ProcessEofWrite()
@@ -504,9 +501,9 @@ class Selectable(object):
           return False
         else:
           if logging.DEBUG_IO:
-            print('=== WRITE HICCUP: =[%s: %s bytes]==' % (self, want_send))
+            print '=== WRITE HICCUP: =[%s: %s bytes]==' % (self, want_send)
           self.write_retry = want_send
-      except (SSL.Error, SSL.ZeroReturnError, SSL.SysCallError) as err:
+      except (SSL.Error, SSL.ZeroReturnError, SSL.SysCallError), err:
         self.LogInfo('Error sending (SSL): %s' % err)
         self.ProcessEofWrite()
         common.DISCONNECT_COUNT += 1
@@ -652,7 +649,7 @@ class LineParser(Selectable):
     return False
 
 
-TLS_CLIENTHELLO = '%c' % 0o26
+TLS_CLIENTHELLO = '%c' % 026
 SSL_CLIENTHELLO = '\x80'
 MINECRAFT_HANDSHAKE = '%c' % (0x02, )
 FLASH_POLICY_REQ = '<policy-file-request/>'
@@ -683,13 +680,13 @@ class MagicProtocolParser(LineParser):
         args[key] = val
 
       self.EatPeeked(eat_bytes=len(prefix)+2+len(words)+2)
-    except ValueError as e:
+    except ValueError, e:
       return True
 
     try:
       port = 'port' in args and args['port'] or None
       if port: self.on_port = int(port)
-    except ValueError as e:
+    except ValueError, e:
       return False
 
     proto = 'proto' in args and args['proto'] or None
@@ -857,7 +854,7 @@ class ChunkParser(Selectable):
             self.compressed = False
             self.want_bytes = int(size, 16)
 
-        except ValueError as err:
+        except ValueError, err:
           self.LogError('ChunkParser::ProcessData: %s' % err)
           self.Log([('bad_data', data)])
           return False

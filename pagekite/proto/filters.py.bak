@@ -37,7 +37,7 @@ class TunnelFilter:
 
   def clean_idle_sids(self, now=None):
     now = now or time.time()
-    for sid in list(self.sid.keys()):
+    for sid in self.sid.keys():
       if self.sid[sid]['_ts'] < now - self.IDLE_TIMEOUT:
         del self.sid[sid]
 
